@@ -179,7 +179,6 @@ def _fill_out_form(driver, search_by, primary_val, court_val, date_obj, case_typ
 
 def process_cause_list(driver, search_by, primary_val, court_val, date_obj, case_type, captcha):
     try:
-        driver.get(NEW_DELHI_COURTS_URL)
         WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.ID, "chkYes")))
         _fill_out_form(driver, search_by, primary_val, court_val, date_obj, case_type, captcha)
         result = _scrape_and_process_result(driver)
