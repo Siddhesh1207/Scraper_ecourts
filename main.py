@@ -1,4 +1,3 @@
-# main.py
 import streamlit as st
 from datetime import date, timedelta
 import core
@@ -18,7 +17,7 @@ if 'complex_list' not in st.session_state:
     st.session_state.establishment_list = {}
     st.session_state.last_primary_id = None
     st.session_state.court_list = {}
-    # New state for batch processing
+    # State for batch processing
     st.session_state.court_queue = []
     st.session_state.batch_results = []
 
@@ -64,11 +63,8 @@ with col2:
     
     st.write("**Enter the CAPTCHA code:**")
     
-    # --- CAPTCHA REFRESH LOGIC ---
-    # The button is just for manual refresh. The script will auto-refresh during batch processing.
     if st.button("Refresh CAPTCHA"):
-        # We don't need to do anything here because the script reruns and calls get_captcha_image below
-        pass
+        st.rerun() # Just rerun the script to get a new image
 
     captcha_path = core.get_captcha_image(driver)
     if captcha_path:
@@ -94,65 +90,64 @@ if st.button("Generate PDF for Selected Court", use_container_width=True, disabl
     else:
         st.warning("Please ensure a court is selected and CAPTCHA is entered.")
 
-# --- START: NEW BATCH PROCESSING SECTION ---
+# --- START: REVISED BATCH PROCESSING SECTION ---
 st.markdown("---")
 st.subheader("4. Batch Download Helper")
 
-# Button to initialize the batch process
 if st.button("Start New Batch for All Courts in Complex", use_container_width=True):
     if st.session_state.court_list:
-        # Create a queue of courts to process
         st.session_state.court_queue = list(st.session_state.court_list.items())
-        st.session_state.batch_results = [] # Clear previous results
+        st.session_state.batch_results = []
         st.info(f"Batch initialized with {len(st.session_state.court_queue)} courts. The next court is ready below.")
+        st.rerun()
     else:
         st.error("No court list is loaded. Please select a complex first.")
 
-# This section is visible only when a batch is active
 if st.session_state.court_queue:
     
-    # Get the next court from the queue without removing it yet
     next_court_name, next_court_value = st.session_state.court_queue[0]
     
     st.warning(f"**Next in queue:** {next_court_name}")
     st.write(f"Remaining courts to process: {len(st.session_state.court_queue)}")
 
-    # The main action button for processing one court at a time
     if st.button("Process Next Court", use_container_width=True, type="primary"):
         if not captcha_text:
-            st.error("Please enter the new CAPTCHA to proceed!")
+            st.error("Please enter the CAPTCHA to proceed!")
         else:
             with st.spinner(f"Processing {next_court_name}..."):
-                # Actually remove the court from the queue now that we are processing it
-                processed_court_name, processed_court_value = st.session_state.court_queue.pop(0)
-
+                
                 result = core.process_cause_list(
                     driver,
                     search_type,
                     selected_primary_value,
-                    processed_court_value,
+                    next_court_value, # Use the next court's value
                     cause_list_date,
                     case_type,
                     captcha_text
                 )
                 
-                # Store the result message
+                # --- THIS IS THE KEY LOGIC ---
+                # Only remove the court from the queue IF it was successful
                 if result['status'] == 'success':
-                    st.session_state.batch_results.append(f"✅ **{processed_court_name}:** Generated `{result['file']}`")
+                    st.session_state.batch_results.append(f"✅ **{next_court_name}:** Generated `{result['file']}`")
+                    st.session_state.court_queue.pop(0) # Success! Remove from queue.
                 else:
-                    st.session_state.batch_results.append(f"❌ **{processed_court_name}:** Failed - {result['data']}")
+                    st.session_state.batch_results.append(f"❌ **{next_court_name}:** Failed - {result['data']}. **Please try again with the new CAPTCHA.**")
+                    # On failure, we DO NOT pop from the queue. It will be retried next.
 
-            # This st.rerun() is key. It forces the page to reload immediately,
-            # which will then run the get_captcha_image() function again to show the new CAPTCHA.
             st.rerun()
 
 # Display results from the batch process
 if st.session_state.batch_results:
     st.markdown("---")
     st.subheader("Batch Results")
-    for res in reversed(st.session_state.batch_results): # Show newest first
-        st.markdown(res)
+    # Display the most recent result prominently
+    st.markdown(st.session_state.batch_results[-1])
+    
+    # Show a summary of older results
+    with st.expander("Show all results"):
+        for res in reversed(st.session_state.batch_results):
+            st.markdown(res)
 
-if st.session_state.court_queue == [] and len(st.session_state.batch_results) > 0:
+if not st.session_state.court_queue and len(st.session_state.batch_results) > 0:
     st.success("🎉 Batch complete! All courts have been processed.")
-# --- END: NEW BATCH PROCESSING SECTION ---
